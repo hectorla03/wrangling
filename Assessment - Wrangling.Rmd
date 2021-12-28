@@ -7,6 +7,10 @@ output: word_document
 
 ## Assessment Part 1: Data Import
 
+In this part of the assessment, you will answer several multiple choice questions that review the concepts of data import. You can answer these questions without using R, although you may find it helpful to experiment with commands in your console.
+
+In the second part of the assessment on the next page, you will import real datasets and learn more about useful arguments to readr functions. The second part of the assessment will require you to program in R.
+
 ### **Question 1**
 
 Which of the following is NOT part of the data wrangling process?
@@ -147,3 +151,58 @@ download.file(url, "MyData.csv")
 
 **Respuesta:**
 *Create a tibble in R called dat that contains the information contained in the csv file stored on Github. Download the csv file to the working directory and name the downloaded file “MyData.csv”.*
+
+#Assessment Part 2: Data Import
+
+In this part of the assessment, you will import real datasets and learn more about useful arguments to readr functions. You will encounter common issues that arise when importing raw data. This part of the assessment will require you to program in R.
+
+Use the readr package in the tidyverse library:
+
+
+
+```{r}
+library(tidyverse)
+```
+ 
+ ### **Question 14**
+ 
+ Inspect the file at the following URL:
+
+[https://archive.ics.uci.edu/ml/machine-learning-databases/breast-cancer-wisconsin/wdbc.data](https://archive.ics.uci.edu/ml/machine-learning-databases/breast-cancer-wisconsin/wdbc.data)
+
+Which **readr** function should be used to import this file?
+
+**Respuesta:**
+`read_csv()`
+
+ ### **Question 15**
+ 
+ Check the documentation for the readr function you chose in the previous question to learn about its arguments. Determine which arguments you need to the file from the previous question:
+ 
+ 
+```{r}
+url <- "https://archive.ics.uci.edu/ml/machine-learning-databases/breast-cancer-wisconsin/wdbc.data"
+```
+
+Does this file have a header row? Does the readr function you chose need any additional arguments to import the data correctly?
+
+**Respuesta:**
+*No, there is no header. The col_names=FALSE argument is necessary.*
+
+ ### **Question 16**
+ 
+ Inspect the imported data from the previous question.
+ 
+```{r}
+d_q16 <- read_csv(url, col_names = FALSE)
+
+```
+How many rows are in the dataset?
+*569*
+ 
+ 
+How many columns are in the dataset?
+*32*
+
+ 
+ 
