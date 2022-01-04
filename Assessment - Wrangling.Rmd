@@ -23,7 +23,7 @@ real datasets and learn more about useful arguments to readr functions.
 The second part of the assessment will require you to program in R.
 
 ### **Question 1**
-/mingw64/bin/git
+
 Which of the following is NOT part of the data wrangling process?
 
 **Respuesta:** *Checking correlations between your variables*
@@ -797,8 +797,13 @@ What is the first table number to have 9 columns where the first column is named
 
 **Respuesta:** *6*
 
-```{r}
+```{r, include=FALSE}
 html_table(tab[1:9], fill = TRUE)
+```
+
+
+```{r}
 html_table(tab[[6]], fill = TRUE)
 ```
+
 
