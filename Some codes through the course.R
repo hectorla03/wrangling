@@ -461,3 +461,444 @@ index <- str_detect(converted, pattern)
 mean(index)
 
 converted[!index]    # show problems
+
+### Separate with Regex
+
+# first example - normally formatted heights
+s <- c("5'10", "6'1")
+tab <- data.frame(x = s)
+
+# the separate and extract functions behave similarly
+tab %>% separate(x, c("feet", "inches"), sep = "'")
+tab %>% extract(x, c("feet", "inches"), regex = "(\\d)'(\\d{1,2})")
+
+# second example - some heights with unusual formats
+s <- c("5'10", "6'1\"","5'8inches")
+tab <- data.frame(x = s)
+
+# separate fails because it leaves in extra characters, but extract keeps only the digits because of regex groups
+tab %>% separate(x, c("feet","inches"), sep = "'", fill = "right")
+tab %>% extract(x, c("feet", "inches"), regex = "(\\d)'(\\d{1,2})")
+
+#Putting it into a function 
+
+convert_format <- function(s){
+  s %>%
+    str_replace("feet|foot|ft", "'") %>% #convert feet symbols to '
+    str_replace_all("inches|in|''|\"|cm|and", "") %>%  #remove inches and other symbols
+    str_replace("^([4-7])\\s*[,\\.\\s+]\\s*(\\d*)$", "\\1'\\2") %>% #change x.y, x,y x y
+    str_replace("^([56])'?$", "\\1'0") %>% #add 0 when to 5 or 6
+    str_replace("^([12])\\s*,\\s*(\\d*)$", "\\1\\.\\2") %>% #change european decimal
+    str_trim() #remove extra space
+}
+
+words_to_numbers <- function(s){
+  str_to_lower(s) %>%  
+    str_replace_all("zero", "0") %>%
+    str_replace_all("one", "1") %>%
+    str_replace_all("two", "2") %>%
+    str_replace_all("three", "3") %>%
+    str_replace_all("four", "4") %>%
+    str_replace_all("five", "5") %>%
+    str_replace_all("six", "6") %>%
+    str_replace_all("seven", "7") %>%
+    str_replace_all("eight", "8") %>%
+    str_replace_all("nine", "9") %>%
+    str_replace_all("ten", "10") %>%
+    str_replace_all("eleven", "11")
+}
+
+converted <- problems %>% words_to_numbers %>% convert_format
+remaining_problems <- converted[not_inches_or_cm(converted)]
+pattern <- "^[4-7]\\s*'\\s*\\d+\\.?\\d*$"
+index <- str_detect(remaining_problems, pattern)
+remaining_problems[!index]
+
+# Putting it All Together
+
+pattern <- "^([4-7])\\s*'\\s*(\\d+\\.?\\d*)$"
+
+smallest <- 50
+tallest <- 84
+new_heights <- reported_heights %>% 
+  mutate(original = height, 
+         height = words_to_numbers(height) %>% convert_format()) %>%
+  extract(height, c("feet", "inches"), regex = pattern, remove = FALSE) %>% 
+  mutate_at(c("height", "feet", "inches"), as.numeric) %>%
+  mutate(guess = 12*feet + inches) %>%
+  mutate(height = case_when(
+    !is.na(height) & between(height, smallest, tallest) ~ height, #inches 
+    !is.na(height) & between(height/2.54, smallest, tallest) ~ height/2.54, #centimeters
+    !is.na(height) & between(height*100/2.54, smallest, tallest) ~ height*100/2.54, #meters
+    !is.na(guess) & inches < 12 & between(guess, smallest, tallest) ~ guess, #feet'inches
+    TRUE ~ as.numeric(NA))) %>%
+  select(-guess)
+
+
+new_heights %>%
+  filter(not_inches(original)) %>%
+  select(original, height) %>% 
+  arrange(height) %>%
+  View()
+
+new_heights %>% arrange(height) %>% head(n=7)
+
+
+# read raw murders data line by line
+filename <- system.file("extdata/murders.csv", package = "dslabs")
+lines <- readLines(filename)
+lines %>% head()
+
+# split at commas with str_split function, remove row of column names
+x <- str_split(lines, ",") 
+x %>% head()
+col_names <- x[[1]]
+x <- x[-1]
+
+# extract first element of each list entry
+library(purrr)
+map(x, function(y) y[1]) %>% head()
+map(x, 1) %>% head()
+
+# extract columns 1-5 as characters, then convert to proper format - NOTE: DIFFERENT FROM VIDEO
+dat <- data.frame(parse_guess(map_chr(x, 1)),
+                  parse_guess(map_chr(x, 2)),
+                  parse_guess(map_chr(x, 3)),
+                  parse_guess(map_chr(x, 4)),
+                  parse_guess(map_chr(x, 5))) %>%
+  setNames(col_names)
+
+dat %>% head
+
+# more efficient code for the same thing
+dat <- x %>%
+  transpose() %>%
+  map( ~ parse_guess(unlist(.))) %>%
+  setNames(col_names) %>% 
+  as.data.frame() 
+
+# the simplify argument makes str_split return a matrix instead of a list
+x <- str_split(lines, ",", simplify = TRUE) 
+col_names <- x[1,]
+x <- x[-1,]
+x %>% as_data_frame() %>%
+  setNames(col_names) %>%
+  mutate_all(parse_guess)
+
+#Case Study: Extracting a Table from a PDF
+
+library(dslabs)
+data("research_funding_rates")
+research_funding_rates 
+
+library("pdftools")
+temp_file <- tempfile()
+url <- "http://www.pnas.org/content/suppl/2015/09/16/1510159112.DCSupplemental/pnas.201510159SI.pdf"
+download.file(url, temp_file)
+txt <- pdf_text(temp_file)
+file.remove(temp_file)
+
+raw_data_research_funding_rates <- txt[2]
+
+raw_data_research_funding_rates %>% head
+
+tab <- str_split(raw_data_research_funding_rates, "\n")
+print(tab)
+tab <- tab[[1]]
+
+tab %>% head
+
+the_names_1 <- tab[3]
+the_names_2 <- tab[5]
+
+the_names_1 <- the_names_1 %>%
+  str_trim() %>%
+  str_replace_all(",\\s.", "") %>%
+  str_split("\\s{2,}", simplify = TRUE)
+the_names_1
+
+the_names_2 <- the_names_2 %>%
+  str_trim() %>%
+  str_split("\\s+", simplify = TRUE)
+the_names_2
+
+tmp_names <- str_c(rep(the_names_1, each = 3), the_names_2[-1], sep = "_")
+the_names <- c(the_names_2[1], tmp_names) %>%
+  str_to_lower() %>%
+  str_replace_all("\\s", "_")
+the_names
+
+new_research_funding_rates <- tab[6:14] %>%
+  str_trim %>%
+  str_split("\\s{2,}", simplify = TRUE) %>%
+  data.frame(stringsAsFactors = FALSE) %>%
+  setNames(the_names) %>%
+  mutate_at(-1, parse_number)
+new_research_funding_rates %>% head()
+
+
+#Recoding
+
+# life expectancy time series for Caribbean countries
+library(dslabs)
+data("gapminder")
+gapminder %>% 
+  filter(region=="Caribbean") %>%
+  ggplot(aes(year, life_expectancy, color = country)) +
+  geom_line()
+
+# display long country names
+gapminder %>% 
+  filter(region=="Caribbean") %>%
+  filter(str_length(country) >= 12) %>%
+  distinct(country) 
+
+# recode long country names and remake plot
+gapminder %>% filter(region=="Caribbean") %>%
+  mutate(country = recode(country, 
+                          'Antigua and Barbuda'="Barbuda",
+                          'Dominican Republic' = "DR",
+                          'St. Vincent and the Grenadines' = "St. Vincent",
+                          'Trinidad and Tobago' = "Trinidad")) %>%
+  ggplot(aes(year, life_expectancy, color = country)) +
+  geom_line()
+
+############# Chapter 25 Parsing dates and times
+
+# inspect the startdate column of 2016 polls data, a Date type
+library(tidyverse)
+library(dslabs)
+data("polls_us_election_2016")
+polls_us_election_2016$startdate %>% head
+class(polls_us_election_2016$startdate)
+as.numeric(polls_us_election_2016$startdate) %>% head
+
+# ggplot is aware of dates
+polls_us_election_2016 %>% filter(pollster == "Ipsos" & state =="U.S.") %>%
+  ggplot(aes(startdate, rawpoll_trump)) +
+  geom_line()
+
+# lubridate: the tidyverse date package
+library(lubridate)
+
+# select some random dates from polls
+set.seed(2)
+dates <- sample(polls_us_election_2016$startdate, 10) %>% sort
+dates
+
+# extract month, day, year from date strings
+data.frame(date = dates, 
+           month = month(dates),
+           day = day(dates),
+           year = year(dates))
+
+month(dates, label = TRUE)    # extract month label
+
+# ymd works on mixed date styles
+x <- c(20090101, "2009-01-02", "2009 01 03", "2009-1-4",
+       "2009-1, 5", "Created on 2009 1 6", "200901 !!! 07")
+ymd(x)
+
+# different parsers extract year, month and day in different orders
+x <- "09/01/02"
+ymd(x)
+mdy(x)
+ydm(x)
+myd(x)
+dmy(x)
+dym(x)
+
+now()    # current time in your time zone
+now("GMT")    # current time in GMT
+now() %>% hour()    # current hour
+now() %>% minute()    # current minute
+now() %>% second()    # current second
+
+# parse time
+x <- c("12:34:56")
+hms(x)
+
+#parse datetime
+x <- "Nov/2/2012 12:34:56"
+mdy_hms(x)
+
+##### Text Mining
+
+# Case study: Trump Tweets
+
+library(tidyverse)
+library(ggplot2)
+library(lubridate)
+library(tidyr)
+library(scales)
+set.seed(1)
+
+url <- 'https://drive.google.com/file/d/16wm-2NTKohhcA26w-kaWfhLIGwl_oX95/view'
+trump_tweets <- map(2009:2017, ~sprintf(url, .x)) %>%
+  map_df(jsonlite::fromJSON, simplifyDataFrame = TRUE) %>%
+  filter(!is_retweet & !str_detect(text, '^"')) %>%
+  mutate(created_at = parse_date_time(created_at, orders = "a b! d! H!:M!:S! z!* Y!", tz="EST")) 
+
+library(dslabs)
+data("trump_tweets")
+
+head(trump_tweets)
+names(trump_tweets)
+
+trump_tweets %>% select(text) %>% head
+trump_tweets %>% count(source) %>% arrange(desc(n))
+
+trump_tweets %>% 
+  extract(source, "source", "Twitter for (.*)") %>%
+  count(source) 
+
+campaign_tweets <- trump_tweets %>% 
+  extract(source, "source", "Twitter for (.*)") %>%
+  filter(source %in% c("Android", "iPhone") &
+           created_at >= ymd("2015-06-17") & 
+           created_at < ymd("2016-11-08")) %>%
+  filter(!is_retweet) %>%
+  arrange(created_at)
+
+ds_theme_set()
+campaign_tweets %>%
+  mutate(hour = hour(with_tz(created_at, "EST"))) %>%
+  count(source, hour) %>%
+  group_by(source) %>%
+  mutate(percent = n / sum(n)) %>%
+  ungroup %>%
+  ggplot(aes(hour, percent, color = source)) +
+  geom_line() +
+  geom_point() +
+  scale_y_continuous(labels = percent_format()) +
+  labs(x = "Hour of day (EST)",
+       y = "% of tweets",
+       color = "")
+
+# Case study: Trump Tweets
+
+library(tidytext)
+
+example <- data_frame(line = c(1, 2, 3, 4),
+                      text = c("Roses are red,", "Violets are blue,", "Sugar is sweet,", "And so are you."))
+example
+example %>% unnest_tokens(word, text)
+
+i <- 3008
+campaign_tweets$text[i]
+campaign_tweets[i,] %>% 
+  unnest_tokens(word, text) %>%
+  select(word)
+
+pattern <- "([^A-Za-z\\d#@']|'(?![A-Za-z\\d#@]))"
+
+campaign_tweets[i,] %>% 
+  unnest_tokens(word, text, token = "regex", pattern = pattern) %>%
+  select(word)
+
+campaign_tweets[i,] %>% 
+  mutate(text = str_replace_all(text, "https://t.co/[A-Za-z\\d]+|&amp;", ""))  %>%
+  unnest_tokens(word, text, token = "regex", pattern = pattern) %>%
+  select(word)
+
+tweet_words <- campaign_tweets %>% 
+  mutate(text = str_replace_all(text, "https://t.co/[A-Za-z\\d]+|&amp;", ""))  %>%
+  unnest_tokens(word, text, token = "regex", pattern = pattern) 
+
+
+tweet_words %>% 
+  count(word) %>%
+  arrange(desc(n))
+
+#If we filter out rows representing stop words with filter(!word %in% stop_words$word):
+
+tweet_words <- campaign_tweets %>% 
+  mutate(text = str_replace_all(text, "https://t.co/[A-Za-z\\d]+|&amp;", ""))  %>%
+  unnest_tokens(word, text, token = "regex", pattern = pattern) %>%
+  filter(!word %in% stop_words$word ) 
+
+tweet_words %>% 
+  count(word) %>%
+  top_n(10, n) %>%
+  mutate(word = reorder(word, n)) %>%
+  arrange(desc(n))
+
+tweet_words <- campaign_tweets %>% 
+  mutate(text = str_replace_all(text, "https://t.co/[A-Za-z\\d]+|&amp;", ""))  %>%
+  unnest_tokens(word, text, token = "regex", pattern = pattern) %>%
+  filter(!word %in% stop_words$word &
+           !str_detect(word, "^\\d+$")) %>%
+  mutate(word = str_replace(word, "^'", ""))
+
+android_iphone_or <- tweet_words %>%
+  count(word, source) %>%
+  spread(source, n, fill = 0) %>%
+  mutate(or = (Android + 0.5) / (sum(Android) - Android + 0.5) / 
+           ( (iPhone + 0.5) / (sum(iPhone) - iPhone + 0.5)))
+android_iphone_or %>% arrange(desc(or))
+android_iphone_or %>% arrange(or)
+
+android_iphone_or %>% filter(Android+iPhone > 100) %>%
+  arrange(desc(or))
+
+android_iphone_or %>% filter(Android+iPhone > 100) %>%
+  arrange(or)
+
+#### Sentiment Analysis
+
+get_sentiments("loughran") %>% count(sentiment)
+get_sentiments("nrc") %>% count(sentiment)
+
+
+nrc <- get_sentiments("nrc") %>%
+  select(word, sentiment)
+
+tweet_words %>% inner_join(nrc, by = "word") %>% 
+  select(source, word, sentiment) %>% sample_n(10)
+
+sentiment_counts <- tweet_words %>%
+  left_join(nrc, by = "word") %>%
+  count(source, sentiment) %>%
+  spread(source, n) %>%
+  mutate(sentiment = replace_na(sentiment, replace = "none"))
+sentiment_counts
+
+tweet_words %>% group_by(source) %>% summarize(n = n())
+
+sentiment_counts %>%
+  mutate(Android = Android / (sum(Android) - Android) , 
+         iPhone = iPhone / (sum(iPhone) - iPhone), 
+         or = Android/iPhone) %>%
+  arrange(desc(or))
+
+library(broom)
+log_or <- sentiment_counts %>%
+  mutate( log_or = log( (Android / (sum(Android) - Android)) / (iPhone / (sum(iPhone) - iPhone))),
+          se = sqrt( 1/Android + 1/(sum(Android) - Android) + 1/iPhone + 1/(sum(iPhone) - iPhone)),
+          conf.low = log_or - qnorm(0.975)*se,
+          conf.high = log_or + qnorm(0.975)*se) %>%
+  arrange(desc(log_or))
+
+log_or
+
+log_or %>%
+  mutate(sentiment = reorder(sentiment, log_or),) %>%
+  ggplot(aes(x = sentiment, ymin = conf.low, ymax = conf.high)) +
+  geom_errorbar() +
+  geom_point(aes(sentiment, log_or)) +
+  ylab("Log odds ratio for association between Android and sentiment") +
+  coord_flip() 
+
+android_iphone_or %>% inner_join(nrc) %>%
+  filter(sentiment == "disgust" & Android + iPhone > 10) %>%
+  arrange(desc(or))
+
+android_iphone_or %>% inner_join(nrc, by = "word") %>%
+  mutate(sentiment = factor(sentiment, levels = log_or$sentiment)) %>%
+  mutate(log_or = log(or)) %>%
+  filter(Android + iPhone > 10 & abs(log_or)>1) %>%
+  mutate(word = reorder(word, log_or)) %>%
+  ggplot(aes(word, log_or, fill = log_or < 0)) +
+  facet_wrap(~sentiment, scales = "free_x", nrow = 2) + 
+  geom_bar(stat="identity", show.legend = FALSE) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) 
